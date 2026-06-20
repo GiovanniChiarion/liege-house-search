@@ -5,16 +5,18 @@ near Liège-Guillemins station.
 """
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
-from functools import wraps, Response
+from functools import wraps
 from flask_cors import CORS
 
 from config import GUILLEMINS_LAT, GUILLEMINS_LON, MAX_WALK_DISTANCE_METERS
 from models import init_db, get_all_listings, get_listing, \
-    add_listing, update_listing_status, delete_listing, get_stats
+    add_listing, update_listing_status, delete_listing, get_stats, \
+    authenticate_user, get_user
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app)
 
 # Initialize database
@@ -35,6 +38,8 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Authentication required'}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -56,27 +61,6 @@ def login():
     return render_template('login.html')
 
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '')
-        name = request.form.get('name', '').strip()
-        if not email or not password:
-            flash('Email e password obbligatori', 'error')
-            return render_template('register.html')
-        if len(password) < 4:
-            flash('Password troppo corta (min 4 caratteri)', 'error')
-            return render_template('register.html')
-        user_id = register_user(email, password, name)
-        if user_id:
-            session['user_id'] = user_id
-            session['user_name'] = name or email.split('@')[0]
-            flash('Registrazione completata!', 'success')
-            return redirect(url_for('index'))
-        flash('Email già registrata', 'error')
-        return render_template('register.html')
-    return render_template('register.html')
 
 
 @app.route('/logout')
@@ -96,6 +80,7 @@ def index():
 
 
 @app.route('/api/listings')
+@login_required
 def api_listings():
     """Get all listings with optional filters."""
     filters = {}
@@ -133,6 +118,7 @@ def api_listings():
 
 
 @app.route('/api/listings/<int:listing_id>')
+@login_required
 def api_get_listing(listing_id):
     """Get a single listing."""
     listing = get_listing(listing_id)
@@ -142,6 +128,7 @@ def api_get_listing(listing_id):
 
 
 @app.route('/api/listings', methods=['POST'])
+@login_required
 def api_add_listing():
     """Add a new listing manually."""
     data = request.get_json()
@@ -162,6 +149,7 @@ def api_add_listing():
 
 
 @app.route('/api/listings/<int:listing_id>/status', methods=['PATCH'])
+@login_required
 def api_update_status(listing_id):
     """Update listing status (viewed, unavailable, rented)."""
     data = request.get_json()
@@ -185,6 +173,7 @@ def api_update_status(listing_id):
 
 
 @app.route('/api/listings/<int:listing_id>/notes', methods=['PATCH'])
+@login_required
 def api_update_notes(listing_id):
     """Update notes for a listing."""
     data = request.get_json()
@@ -205,6 +194,7 @@ def api_update_notes(listing_id):
 
 
 @app.route('/api/listings/<int:listing_id>', methods=['DELETE'])
+@login_required
 def api_delete_listing(listing_id):
     """Delete a listing."""
     try:
@@ -216,6 +206,7 @@ def api_delete_listing(listing_id):
 
 
 @app.route('/api/listings/<int:listing_id>/route')
+@login_required
 def api_listing_route(listing_id):
     """Get walking route for a listing.
     Returns GeoJSON route geometry from Guillemins station to the listing.
@@ -254,6 +245,7 @@ def api_listing_route(listing_id):
 
 
 @app.route('/api/routes/batch', methods=['POST'])
+@login_required
 def api_batch_routes():
     """Batch compute walking distances for listings that don't have one yet."""
     from routing import batch_update_walking_distances
@@ -272,12 +264,14 @@ def api_batch_routes():
 
 
 @app.route('/api/stats')
+@login_required
 def api_stats():
     """Get database statistics."""
     return jsonify(get_stats())
 
 
 @app.route('/api/scrape', methods=['POST'])
+@login_required
 def api_scrape():
     """Trigger scraping of Immoweb listings.
     Uses the map area filter around Guillemins.
@@ -328,6 +322,7 @@ def api_scrape():
 
 
 @app.route('/api/listings/import', methods=['POST'])
+@login_required
 def api_import_listings():
     """Bulk import listings from JSON array."""
     data = request.get_json()
@@ -351,6 +346,7 @@ def api_import_listings():
 
 
 @app.route('/api/config')
+@login_required
 def api_config():
     """Get application configuration."""
     return jsonify({
@@ -360,6 +356,11 @@ def api_config():
         'default_max_price': 1300,
         'default_min_bedrooms': 2,
     })
+
+
+def create_app():
+    """Application factory for production WSGI servers (waitress/gunicorn)."""
+    return app
 
 
 if __name__ == '__main__':
