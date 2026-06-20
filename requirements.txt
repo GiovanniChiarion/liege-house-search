@@ -1,0 +1,9 @@
+flask>=3.0
+flask-cors>=4.0
+werkzeug>=3.0
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+waitress>=3.0
+libsql>=0.1.11
+playwright>=1.40
