@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="it" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liège House Search - Case in affitto vicino Guillemins</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Leaflet.markercluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Animate.css -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+    <style>
+        :root {
+            --bs-body-bg: #0f0f1a;
+            --bs-body-color: #e0e0e0;
+            --card-bg: #1a1a2e;
+            --card-border: #2a2a4a;
+            --accent: #6c63ff;
+            --accent-light: #8b83ff;
+            --accent-dark: #4a42cc;
+            --success: #00c853;
+            --warning: #ffd600;
+            --danger: #ff1744;
+            --text-muted: #888;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bs-body-bg);
+            color: var(--bs-body-color);
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        .app-header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-bottom: 1px solid var(--card-border);
+            padding: 0.75rem 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .app-header .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-light), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .app-header .logo i {
+            -webkit-text-fill-color: initial;
+            color: var(--accent-light);
+            margin-right: 0.5rem;
+        }
+
+        .app-header .subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-left: 0.5rem;
+        }
+
+        .stats-badge {
+            background: rgba(108, 99, 255, 0.15);
+            border: 1px solid rgba(108, 99, 255, 0.3);
+            border-radius: 20px;
+            padding: 0.25rem 1rem;
+            font-size: 0.8rem;
+            color: var(--accent-light);
+        }
+
+        .stats-badge i {
+            margin-right: 0.3rem;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 62px);
+            position: relative;
+        }
+
+        /* Map Panel */
+        .map-panel {
+            flex: 1;
+            position: relative;
+            min-width: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Listing Panel */
+        .listings-panel {
+            width: 420px;
+            min-width: 420px;
+            background: var(--bs-body-bg);
+            border-left: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 2;
+        }
+
+        .listings-panel.collapsed {
+            width: 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .panel-toggle {
+            position: absolute;
+            right: 420px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+            padding: 0.6rem 0.3rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: right 0.3s ease;
+        }
+
+        .panel-toggle:hover {
+            color: var(--accent-light);
+        }
+
+        .listings-panel.collapsed + .panel-toggle {
+            right: 0;
+        }
+
+        /* Filters */
+        .filters-bar {
+            padding: 0.75rem 1rem;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--card-border);
+            flex-shrink: 0;
+        }
+
+        .filters-bar .form-control,
+        .filters-bar .form-select {
+            background: #0f0f1a;
+            border: 1px solid var(--card-border);
+            color: var(--bs-body-color);
+            font-size: 0.85rem;
+        }
+
+        .filters-bar .form-control:focus,
+        .filters-bar .form-select:focus {
+            box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.25);
+            border-color: var(--accent);
+        }
+
+        .filters-bar .form-switch .form-check-input {
+            background-color: #333;
+            border-color: #555;
+            cursor: pointer;
+        }
+
+        .filters-bar .form-switch .form-check-input:checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .filter-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Listing Cards Container */
+        .listings-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+        }
+
+        .listings-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .listings-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .listings-container::-webkit-scrollbar-thumb {
+            background: var(--card-border);
+            border-radius: 3px;
+        }
+
+        /* Listing Card */
+        .listing-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .listing-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(108, 99, 255, 0.15);
+        }
+
+        .listing-card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.3);
+        }
+
+        .listing-card.viewed {
+            opacity: 0.6;
+            border-color: #333;
+        }
+
+        .listing-card.viewed:hover {
+            opacity: 0.8;
+        }
+
+        .listing-card.unavailable {
+            opacity: 0.4;
+            border-color: var(--danger);
+            background: #1a0a0a;
+        }
+
+        .listing-card .card-badge {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+            z-index: 2;
+        }
+
+        .listing-card .card-image {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #0a0a1a;
+        }
+
+        .listing-card .card-image-placeholder {
+            width: 100%;
+            height: 120px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0a0a1a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 2rem;
+        }
+
+        .listing-card .card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .listing-card .card-address {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .listing-card .card-details {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .listing-card .card-details span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .listing-card .card-details i {
+            color: var(--accent-light);
+            font-size: 0.9rem;
+        }
+
+        .listing-card .price-tag {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-light);
+        }
+
+        .listing-card .date-tag {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .listing-card .card-actions {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+        }
+
+        .listing-card .card-actions .btn {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .listing-card .distance-tag {
+            font-size: 0.75rem;
+            color: var(--warning);
+        }
+
+        .listing-card .distance-tag.near {
+            color: var(--success);
+        }
+
+        .listing-card .distance-tag.far {
+            color: var(--danger);
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Loading spinner */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 15, 26, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(4px);
+        }
+
+        .loading-overlay .spinner-border {
+            width: 3rem;
+            height: 3rem;
+            color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .listings-panel {
+                width: 350px;
+                min-width: 350px;
+            }
+            .panel-toggle {
+                right: 350px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column-reverse;
+            }
+            .listings-panel {
+                width: 100%;
+                min-width: 100%;
+                height: 45vh;
+                border-left: none;
+                border-top: 1px solid var(--card-border);
+            }
+            .map-panel {
+                height: 55vh;
+            }
+            .panel-toggle {
+                display: none;
+            }
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 9999;
+        }
+
+        /* Legend */
+        .map-legend {
+            position: absolute;
+            bottom: 1.5rem;
+            left: 1rem;
+            z-index: 1000;
+            background: rgba(26, 26, 46, 0.9);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 0.6rem 1rem;
+            font-size: 0.75rem;
+        }
+
+        .map-legend .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .map-legend .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* Detail Modal */
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+        }
+
+        .modal-header {
+            border-bottom-color: var(--card-border);
+        }
+
+        .modal-footer {
+            border-top-color: var(--card-border);
+        }
+
+        .btn-close {
+            filter: invert(0.8);
+        }
+
+        .detail-image {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        /* Pulse animation for new listings */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(108, 99, 255, 0); }
+        }
+
+        .listing-card.new-listing {
+            animation: pulse-glow 2s ease-in-out 3;
+        }
+
+        /* Scrape button progress */
+        .scrape-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+        }
+
+        .scrape-progress .progress-bar {
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            height: 3px;
+        }
+    </style>
+</head>
+<body>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div style="background:#16162a; border-bottom:1px solid #2a2a4a; padding:0.4rem 1rem; text-align:center; font-size:0.85rem; color:
+                {% if category == 'success' %}#4cdf8b{% elif category == 'error' %}#ff6b6b{% else %}#6bb5ff{% endif %};">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+<div class="user-bar" style="background:#16162a; border-bottom:1px solid #2a2a4a; padding:0.3rem 1rem; display:flex; justify-content:space-between; align-items:center; font-size:0.8rem;">
+    <span style="color:#888;"><i class="bi bi-person-circle"></i> {{ session.get('user_name', 'Utente') }}</span>
+    <a href="{{ url_for('logout') }}" style="color:#888; text-decoration:none;"><i class="bi bi-box-arrow-right"></i> Logout</a>
+</div>
+
+<!-- Progress bar for scraping -->
+<div class="scrape-progress d-none" id="scrapeProgress">
+    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+</div>
+
+<!-- Header -->
+<header class="app-header d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center">
+        <div class="logo">
+            <i class="bi bi-house-heart-fill"></i>Liège House Search
+            <span class="subtitle d-none d-md-inline">Case in affitto vicino Guillemins</span>
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span class="stats-badge d-none d-md-inline" id="statsBadge">
+            <i class="bi bi-building"></i><span id="statsTotal">0</span> annunci
+        </span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="refreshListings()" title="Aggiorna">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button class="btn btn-sm btn-accent" onclick="scrapeImmoweb()" title="Cerca nuovi annunci su Immoweb" id="scrapeBtn">
+            <i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>
+        </button>
+    </div>
+</header>
+
+<!-- Main Content -->
+<div class="main-container">
+    <!-- Map -->
+    <div class="map-panel">
+        <div id="map"></div>
+        <div class="map-legend d-none d-md-block">
+            <div class="legend-item">
+                <span class="legend-dot" style="background: var(--accent);"></span>
+                <span>Disponibile</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: var(--success);"></span>
+                <span>Già visto</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: var(--danger);"></span>
+                <span>Non disponibile</span>
+            </div>
+            <div class="legend-item mt-1">
+                <span class="legend-dot" style="background: var(--warning); width: 12px; height: 12px; border-radius: 2px;"></span>
+                <span>Stazione Guillemins</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Listings Sidebar -->
+    <div class="listings-panel" id="listingsPanel">
+        <!-- Filters -->
+        <div class="filters-bar">
+            <div class="row g-2 align-items-end">
+                <div class="col-4">
+                    <div class="filter-label">Prezzo max</div>
+                    <input type="number" class="form-control form-control-sm" id="filterPrice" value="1300" min="500" max="5000" step="100">
+                </div>
+                <div class="col-4">
+                    <div class="filter-label">Camere min</div>
+                    <select class="form-select form-select-sm" id="filterBedrooms">
+                        <option value="1">1+</option>
+                        <option value="2" selected>2+</option>
+                        <option value="3">3+</option>
+                        <option value="4">4+</option>
+                    </select>
+                </div>
+                <div class="col-4">
+                    <div class="filter-label">A piedi max (min)</div>
+                    <input type="number" class="form-control form-control-sm" id="filterWalkTime" value="10" min="1" max="120" step="1" style="background: #0f0f1a; border: 1px solid var(--card-border); color: var(--bs-body-color);">
+                </div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-4">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filterViewed" checked>
+                        <label class="form-check-label filter-label" for="filterViewed">Mostra visti</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filterUnavailable" checked>
+                        <label class="form-check-label filter-label" for="filterUnavailable">Mostra non disp.</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filterExcluded">
+                        <label class="form-check-label filter-label" for="filterExcluded">Mostra esclusi</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="filter-label">Ordina</div>
+                    <select class="form-select form-select-sm" id="filterSort" style="width: auto;">
+                        <option value="distance">Distanza</option>
+                        <option value="price_asc">Prezzo ↑</option>
+                        <option value="price_desc">Prezzo ↓</option>
+                        <option value="date_desc">Più recenti</option>
+                        <option value="date_asc">Più vecchi</option>
+                        <option value="bedrooms">Camere</option>
+                    </select>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()" title="Ripristina filtri predefiniti">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <span class="filter-label ms-1" id="resultCount">0 risultati</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Listings -->
+        <div class="listings-container" id="listingsContainer">
+            <div class="empty-state">
+                <i class="bi bi-search-heart"></i>
+                <h6>Nessun annuncio trovato</h6>
+                <p class="small">Clicca "Cerca su Immoweb" per importare gli annunci<br>oppure aggiungili manualmente.</p>
+                <button class="btn btn-accent btn-sm" onclick="scrapeImmoweb()">
+                    <i class="bi bi-search-heart"></i> Cerca su Immoweb
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel Toggle Button -->
+    <div class="panel-toggle" id="panelToggle" onclick="togglePanel()">
+        <i class="bi bi-chevron-right" id="panelToggleIcon"></i>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container"></div>
+
+<!-- Detail Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailTitle">Dettagli annuncio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-accent" role="status"></div>
+                </div>
+            </div>
+            <div class="modal-footer d-flex flex-wrap gap-2">
+                <div class="d-flex gap-2 align-items-center me-auto">
+                    <button class="btn btn-sm btn-outline-success" id="detailBtnViewed" onclick="toggleViewedFromDetail()" title="Segna come visto">
+                        <i class="bi bi-eye"></i> Visto
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" id="detailBtnUnavailable" onclick="toggleUnavailableFromDetail()" title="Segna come non disponibile">
+                        <i class="bi bi-x-circle"></i> Non disp.
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" id="detailBtnExclude" onclick="toggleExcludeFromDetail()" title="Nascondi annuncio">
+                        <i class="bi bi-eye-slash"></i> Nascondi
+                    </button>
+                </div>
+                <div class="w-100" id="detailExcludeReason" style="display:none;">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" id="excludeReasonInput" placeholder="Motivo (opzionale)..." style="background: #0f0f1a; border: 1px solid var(--card-border); color: var(--bs-body-color); font-size: 0.8rem;">
+                        <button class="btn btn-sm btn-outline-danger" onclick="confirmExclude()">Conferma</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="cancelExclude()">Annulla</button>
+                    </div>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+                <a href="#" class="btn btn-accent btn-sm" id="detailOpenUrl" target="_blank" rel="noopener">
+                    <i class="bi bi-box-arrow-up-right"></i> Annuncio originale
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Listing Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Aggiungi annuncio manualmente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addForm">
+                    <div class="mb-3">
+                        <label class="form-label">Titolo *</label>
+                        <input type="text" class="form-control" name="title" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Prezzo (€) *</label>
+                            <input type="number" class="form-control" name="price" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Camere</label>
+                            <input type="number" class="form-control" name="bedrooms" min="1">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Indirizzo</label>
+                        <input type="text" class="form-control" name="address">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">URL annuncio</label>
+                            <input type="url" class="form-control" name="url">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">URL immagine</label>
+                            <input type="url" class="form-control" name="image_url">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Latitudine</label>
+                            <input type="number" step="any" class="form-control" name="latitude">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Longitudine</label>
+                            <input type="number" step="any" class="form-control" name="longitude">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrizione</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button class="btn btn-accent" onclick="addManualListing()">
+                    <i class="bi bi-plus-circle"></i> Aggiungi
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet.markercluster -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Main App JS -->
+<script>
+    // Configuration from server
+    const CONFIG = {
+        guilleminsLat: {{ guillemins_lat }},
+        guilleminsLon: {{ guillemins_lon }},
+    };
+
+    let map, markersLayer, routeLayer, allListings = [];
+    let detailModal, addModal;
+    let currentHighlightId = null;
+    let currentRouteLayer = null;
+    let stationMarker = null;
+
+    // Initialize application
+    document.addEventListener('DOMContentLoaded', () => {
+        initMap();
+        initModals();
+        loadFilterState();
+        loadListings();
+        setupFilterListeners();
+    });
+
+    function initMap() {
+        map = L.map('map', {
+            center: [CONFIG.guilleminsLat, CONFIG.guilleminsLon],
+            zoom: 15,
+            zoomControl: true,
+        });
+
+        // Dark tile layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Guillemins station marker
+        const stationIcon = L.divIcon({
+            className: 'station-marker',
+            html: `<div style="
+                width: 24px; height: 24px;
+                background: var(--warning, #ffd600);
+                border: 3px solid rgba(255, 214, 0, 0.4);
+                border-radius: 4px;
+                transform: rotate(45deg);
+                box-shadow: 0 0 20px rgba(255, 214, 0, 0.5);
+            "></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+
+        stationMarker = L.marker([CONFIG.guilleminsLat, CONFIG.guilleminsLon], { icon: stationIcon })
+            .addTo(map)
+            .bindTooltip('🚄 Liège-Guillemins');
+
+        // Route layer (for walking path)
+        routeLayer = L.layerGroup().addTo(map);
+
+        // Walking distance circle (800m)
+        L.circle([CONFIG.guilleminsLat, CONFIG.guilleminsLon], {
+            radius: 800,
+            color: '#6c63ff',
+            fillColor: '#6c63ff',
+            fillOpacity: 0.05,
+            weight: 1,
+            dashArray: '5, 10',
+        }).addTo(map);
+
+        // Marker cluster layer
+        markersLayer = L.markerClusterGroup({
+            chunkedLoading: true,
+            maxClusterRadius: 50,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            iconCreateFunction: (cluster) => {
+                const count = cluster.getChildCount();
+                let color = '#6c63ff';
+                if (count > 10) color = '#ffd600';
+                if (count > 25) color = '#ff1744';
+                return L.divIcon({
+                    html: `<div style="
+                        width: 40px; height: 40px;
+                        background: ${color};
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #fff;
+                        font-weight: 700;
+                        font-size: 14px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                        border: 2px solid rgba(255,255,255,0.2);
+                    ">${count}</div>`,
+                    className: 'custom-cluster',
+                    iconSize: [40, 40],
+                });
+            },
+        });
+
+        map.addLayer(markersLayer);
+
+        // Click on map to add marker
+        map.on('click', (e) => {
+            const form = document.getElementById('addForm');
+            form.latitude.value = e.latlng.lat.toFixed(6);
+            form.longitude.value = e.latlng.lng.toFixed(6);
+            addModal.show();
+        });
+    }
+
+    function initModals() {
+        detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+        addModal = new bootstrap.Modal(document.getElementById('addModal'));
+
+        document.getElementById('addModal').addEventListener('hidden.bs.modal', () => {
+            document.getElementById('addForm').reset();
+        });
+    }
+
+    function saveFilterState() {
+        const state = {
+            filterPrice: document.getElementById('filterPrice').value,
+            filterBedrooms: document.getElementById('filterBedrooms').value,
+            filterWalkTime: document.getElementById('filterWalkTime').value,
+            filterViewed: document.getElementById('filterViewed').checked,
+            filterUnavailable: document.getElementById('filterUnavailable').checked,
+            filterExcluded: document.getElementById('filterExcluded').checked,
+            filterSort: document.getElementById('filterSort').value,
+        };
+        try { localStorage.setItem('liegeHouseFilters', JSON.stringify(state)); } catch(e) {}
+    }
+
+    function loadFilterState() {
+        try {
+            const saved = localStorage.getItem('liegeHouseFilters');
+            if (!saved) return;
+            const state = JSON.parse(saved);
+            if (state.filterPrice) document.getElementById('filterPrice').value = state.filterPrice;
+            if (state.filterBedrooms) document.getElementById('filterBedrooms').value = state.filterBedrooms;
+            if (state.filterWalkTime) document.getElementById('filterWalkTime').value = state.filterWalkTime;
+            document.getElementById('filterViewed').checked = state.filterViewed !== false;
+            document.getElementById('filterUnavailable').checked = state.filterUnavailable !== false;
+            document.getElementById('filterExcluded').checked = state.filterExcluded === true;
+            if (state.filterSort) document.getElementById('filterSort').value = state.filterSort;
+        } catch(e) {}
+    }
+
+    function resetFilters() {
+        localStorage.removeItem('liegeHouseFilters');
+        document.getElementById('filterPrice').value = '1300';
+        document.getElementById('filterBedrooms').value = '2';
+        document.getElementById('filterWalkTime').value = '10';
+        document.getElementById('filterViewed').checked = true;
+        document.getElementById('filterUnavailable').checked = true;
+        document.getElementById('filterExcluded').checked = false;
+        document.getElementById('filterSort').value = 'distance';
+        showToast('✅ Filtri ripristinati', 'info');
+        loadListings();
+    }
+
+    function setupFilterListeners() {
+        ['filterPrice', 'filterBedrooms', 'filterWalkTime', 'filterViewed', 'filterUnavailable', 'filterExcluded', 'filterSort'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('change', () => { saveFilterState(); loadListings(); });
+            el.addEventListener('input', () => { saveFilterState(); loadListings(); });
+        });
+    }
+
+    async function loadListings() {
+        try {
+            const params = new URLSearchParams();
+            params.set('max_price', document.getElementById('filterPrice').value || 1300);
+            params.set('min_bedrooms', document.getElementById('filterBedrooms').value || 1);
+            params.set('max_distance', 99999); // Get all, filter by walk time client-side
+            params.set('show_viewed', document.getElementById('filterViewed').checked);
+            params.set('show_unavailable', document.getElementById('filterUnavailable').checked);
+            params.set('show_excluded', document.getElementById('filterExcluded').checked);
+
+            const res = await fetch(`/api/listings?${params}`);
+            allListings = await res.json();
+
+            // Filter by walking distance / walking time
+            const maxMinutes = parseFloat(document.getElementById('filterWalkTime').value) || 99999;
+            // Convert minutes to meters (80m/min ≈ 4.8 km/h walking speed)
+            const maxWalk = maxMinutes * 80;
+            allListings = allListings.filter(l => {
+                const walkDist = l.walking_distance || l.distance_to_station || 0;
+                return walkDist <= maxWalk;
+            });
+
+            const sortBy = document.getElementById('filterSort').value;
+            allListings.sort((a, b) => {
+                const walkA = a.walking_distance || a.distance_to_station || 99999;
+                const walkB = b.walking_distance || b.distance_to_station || 99999;
+                switch (sortBy) {
+                    case 'distance': return walkA - walkB;
+                    case 'price_asc': return (a.price || 0) - (b.price || 0);
+                    case 'price_desc': return (b.price || 0) - (a.price || 0);
+                    case 'date_desc': return new Date(b.date_posted || b.date_discovered || 0) - new Date(a.date_posted || a.date_discovered || 0);
+                    case 'date_asc': return new Date(a.date_posted || a.date_discovered || 0) - new Date(b.date_posted || b.date_discovered || 0);
+                    case 'bedrooms': return (b.bedrooms || 0) - (a.bedrooms || 0);
+                    default: return walkA - walkB;
+                }
+            });
+
+            renderListings(allListings);
+            updateMap(allListings);
+            updateStats();
+        } catch (err) {
+            console.error('Error loading listings:', err);
+            showToast('Errore nel caricamento degli annunci', 'error');
+        }
+    }
+
+    function renderListings(listings) {
+        const container = document.getElementById('listingsContainer');
+        document.getElementById('resultCount').textContent = `${listings.length} risultati`;
+
+        if (!listings.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-search-heart"></i>
+                    <h6>Nessun annuncio trovato</h6>
+                    <p class="small">Prova a modificare i filtri o clicca "Cerca su Immoweb"</p>
+                </div>`;
+            return;
+        }
+
+        let html = '';
+        for (const listing of listings) {
+            const isViewed = listing.is_viewed;
+            const isUnavailable = listing.is_unavailable;
+            const isActive = currentHighlightId === listing.id;
+
+            const walkDist = listing.walking_distance;
+            const airDist = listing.distance_to_station;
+            const distanceText = walkDist
+                ? ('🚶 ' + formatDistance(walkDist))
+                : (airDist ? ('✈ ' + formatDistance(airDist)) : '?');
+
+            const distForClass = walkDist || airDist || 0;
+            const distanceClass = distForClass <= 800 ? 'near' : 'far';
+
+            const dateText = formatDate(listing.date_posted || listing.date_discovered);
+            const imageHtml = listing.image_url
+                ? `<img class="card-image" src="${listing.image_url}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'card-image-placeholder\\'><i class=\\'bi bi-house\\'></i></div>'">`
+                : `<div class="card-image-placeholder"><i class="bi bi-house"></i></div>`;
+
+            html += `
+                <div class="listing-card ${isViewed ? 'viewed' : ''} ${isUnavailable ? 'unavailable' : ''} ${isActive ? 'active' : ''}"
+                     onclick="highlightListing(${listing.id})"
+                     ondblclick="showDetail(${listing.id})"
+                     data-id="${listing.id}">
+                    <div class="row g-2">
+                        <div class="col-4">
+                            ${imageHtml}
+                        </div>
+                        <div class="col-8">
+                            ${isUnavailable ? '<span class="card-badge badge bg-danger">Non disponibile</span>' : ''}
+                            ${isViewed && !isUnavailable ? '<span class="card-badge badge bg-secondary">Visto</span>' : ''}
+                            <div class="card-title">${escapeHtml(listing.title || 'Appartamento')}</div>
+                            <div class="card-address"><i class="bi bi-geo-alt"></i> ${escapeHtml(listing.address || 'Liège')}</div>
+                            <div class="card-details">
+                                <span><i class="bi bi-euro"></i> ${listing.price}/mese</span>
+                                <span><i class="bi bi-door-open"></i> ${listing.bedrooms || '?'} cam.</span>
+                                <span class="distance-tag ${distanceClass}"><i class="bi bi-signpost-2"></i> ${distanceText}</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="date-tag"><i class="bi bi-calendar3"></i> ${dateText}</span>
+                                <span class="card-actions">
+                                    <button class="btn btn-outline-success btn-xs" onclick="event.stopPropagation(); toggleViewed(${listing.id})" title="${isViewed ? 'Segna come non visto' : 'Segna come visto'}">
+                                        <i class="bi ${isViewed ? 'bi-eye-slash' : 'bi-eye'}"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-xs" onclick="event.stopPropagation(); toggleUnavailable(${listing.id})" title="${isUnavailable ? 'Segna come disponibile' : 'Segna come non disponibile'}">
+                                        <i class="bi ${isUnavailable ? 'bi-check-circle' : 'bi-x-circle'}"></i>
+                                    </button>
+                                    <a href="#" onclick="event.stopPropagation(); openGoogleMaps(${listing.latitude}, ${listing.longitude})" class="btn btn-outline-info btn-xs" title="Percorso su Google Maps">
+                                        <i class="bi bi-map"></i>
+                                    </a>
+                                    <a href="${listing.url || '#'}" target="_blank" rel="noopener" class="btn btn-outline-accent btn-xs" onclick="event.stopPropagation();" title="Apri annuncio originale">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function updateMap(listings) {
+        markersLayer.clearLayers();
+
+        const markers = [];
+        for (const listing of listings) {
+            if (!listing.latitude || !listing.longitude) continue;
+
+            const isViewed = listing.is_viewed;
+            const isUnavailable = listing.is_unavailable;
+            const isExcluded = listing.excluded;
+
+            // Skip excluded listings on the map
+            if (isExcluded) continue;
+
+            let color = '#6c63ff'; // available
+            let pulse = false;
+            if (isUnavailable) {
+                color = '#ff1744'; // unavailable
+            } else if (isViewed) {
+                color = '#00c853'; // viewed
+            }
+
+            const marker = L.circleMarker([listing.latitude, listing.longitude], {
+                radius: isUnavailable ? 6 : 8,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                opacity: isUnavailable ? 0.5 : 1,
+                fillOpacity: isUnavailable ? 0.4 : 0.8,
+            });
+
+            const walkDist = listing.walking_distance;
+            const airDist = listing.distance_to_station;
+            const distanceText = walkDist
+                ? ('🚶 ' + formatDistance(walkDist))
+                : (airDist ? ('✈ ' + formatDistance(airDist)) : '?');
+
+            let statusIcon = '';
+            if (isUnavailable) statusIcon = '❌ ';
+            else if (isViewed) statusIcon = '👁️ ';
+
+            marker.bindTooltip(`
+                <div style="font-size: 13px;">
+                    <strong>${statusIcon}${escapeHtml(listing.title || 'Appartamento')}</strong><br>
+                    €${listing.price}/mese · ${listing.bedrooms || '?'} camere<br>
+                    📍 ${distanceText} dalla stazione<br>
+                    <em style="font-size: 11px; color: #888;">Clicca per dettagli</em>
+                </div>
+            `, { direction: 'top' });
+
+            marker.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                highlightListing(listing.id);
+                showDetail(listing.id);
+            });
+
+            markers.push(marker);
+        }
+
+        markersLayer.addLayers(markers);
+
+        // Fit bounds to show all markers
+        if (markers.length > 0) {
+            const group = L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.1), { maxZoom: 16 });
+        }
+    }
+
+    function highlightListing(id) {
+        currentHighlightId = id;
+        // Update visual state
+        document.querySelectorAll('.listing-card').forEach(c => c.classList.remove('active'));
+        const card = document.querySelector(`.listing-card[data-id="${id}"]`);
+        if (card) {
+            card.classList.add('active');
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Highlight on map
+        markersLayer.eachLayer((layer) => {
+            if (layer._latlng && layer.setStyle) {
+                layer.setStyle({ weight: 2 });
+            }
+        });
+
+        // Fetch and draw the walking route
+        drawWalkingRoute(id);
+    }
+
+    async function drawWalkingRoute(listingId) {
+        // Clear previous route
+        routeLayer.clearLayers();
+
+        try {
+            const res = await fetch(`/api/listings/${listingId}/route`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (!data.geometry || !data.geometry.coordinates) return;
+
+            const coords = data.geometry.coordinates.map(c => [c[1], c[0]]); // GeoJSON [lon,lat] → Leaflet [lat,lng]
+
+            // Draw route line
+            const routeLine = L.polyline(coords, {
+                color: '#6c63ff',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '10, 10',
+            }).addTo(routeLayer);
+
+            // Start marker (station)
+            const startIcon = L.divIcon({
+                className: 'route-start',
+                html: '<div style="width:14px;height:14px;background:#ffd600;border-radius:50%;border:2px solid #fff;"></div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+            });
+            L.marker(coords[0], { icon: startIcon }).addTo(routeLayer);
+
+            // End marker (listing)
+            const endIcon = L.divIcon({
+                className: 'route-end',
+                html: '<div style="width:14px;height:14px;background:#6c63ff;border-radius:50%;border:2px solid #fff;"></div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+            });
+            L.marker(coords[coords.length - 1], { icon: endIcon }).addTo(routeLayer);
+
+            // Fit map to show the full route
+            map.fitBounds(routeLine.getBounds().pad(0.1), { maxZoom: 16 });
+
+        } catch (err) {
+            console.error('Route error:', err);
+        }
+    }
+
+    function generateSummary(listing) {
+        let f = listing.features || {};
+        if (typeof f === 'string') { try { f = JSON.parse(f); } catch(e) { f = {}; } }
+        const parts = [];
+        
+        // Tipo immobile
+        const typeMap = {'APARTMENT':'Appartamento', 'HOUSE':'Casa', 'LOFT':'Loft', 'DUPLEX':'Duplex', 'STUDIO':'Monolocale', 'PENTHOUSE':'Attico', 'GROUND_FLOOR':'Piano terra'};
+        const tipo = typeMap[f.type] || f.type || 'Appartamento';
+        parts.push(tipo);
+        
+        if (f.bedrooms) parts.push(f.bedrooms + ' camere');
+        if (f.surface) parts.push(f.surface + ' m²');
+        if (f.floor !== null && f.floor !== undefined) parts.push('piano ' + f.floor);
+        if (f.condition) {
+            const condMap = {'GOOD':'Buono', 'TO_RENOVATE':'Da ristrutturare', 'NEW':'Nuovo', 'JUST_RENOVATED':'Appena ristrutturato', 'EXCELLENT':'Ottimo'};
+            parts.push('condizioni ' + (condMap[f.condition] || f.condition.toLowerCase()));
+        }
+        
+        let firstPart = parts.join(', ');
+        
+        // Seconda parte: comfort
+        const amen = f.amenities || {};
+        const extras = [];
+        if (amen.Lift) extras.push('ascensore');
+        if (amen.Balcony) extras.push('balcone');
+        if (amen.Terrace) extras.push('terrazzo');
+        if (amen.Garden) extras.push('giardino');
+        if (amen.Basement) extras.push('cantina');
+        if (amen.ArmoredDoor) extras.push('porta blindata');
+        if (amen.CaretakerOrConcierge) extras.push('portineria');
+        if (amen.DoorPhone || amen.Visiophone) extras.push('videocitofono');
+        if (amen.Parking || amen.ParkingIndoor) extras.push('parcheggio');
+        if (f.parking_closed_box) extras.push('box auto');
+        if (f.kitchen_type) {
+            const kMap = {'INSTALLED':'Cucina abitabile', 'SEMI_EQUIPPED':'Cucina semi-arredata', 'NOT_INSTALLED':'Cucina non arredata', 'HYPER_EQUIPPED':'Cucina super-arredata', 'USA':'Cucina americana', 'SEPARATE':'Cucina separata'};
+            extras.push(kMap[f.kitchen_type] || 'Cucina ' + f.kitchen_type.toLowerCase());
+        }
+        if (f.heating_type) {
+            const hMap = {'GAS':'Riscaldamento a gas', 'FUELOIL':'Riscaldamento a gasolio', 'ELECTRIC':'Riscaldamento elettrico', 'PELLET':'Riscaldamento a pellet'};
+            extras.push(hMap[f.heating_type] || f.heating_type.toLowerCase());
+        }
+        if (f.has_double_glazing) extras.push('doppi vetri');
+        if (f.epc_label) extras.push('Classe energetica ' + f.epc_label);
+        
+        let summary = '🏠 ' + firstPart + '.';
+        if (extras.length > 0) summary += ' Dotato di: ' + extras.join(', ') + '.';
+        
+        if (listing.price) summary += ' Affitto: €' + listing.price + '/mese.';
+        if (listing.walking_distance) summary += ' A ' + Math.round(listing.walking_distance / 80) + ' min a piedi dalla stazione.';
+        
+        return summary;
+    }
+    
+    function renderFeatures(features) {
+        if (!features) return '';
+        if (typeof features === 'string') { try { features = JSON.parse(features); } catch(e) { return ''; } }
+        const f = features;
+        const items = [];
+        
+        const addItem = (icon, label, value) => {
+            if (value === null || value === undefined || value === '' || value === false) return;
+            if (value === true) value = '✅ Sì';
+            if (value === 'YES' || value === 'true') value = '✅ Sì';
+            if (value === 'NO' || value === 'false') value = '❌ No';
+            items.push(`<div class="col-6"><small class="text-muted">${icon} ${label}</small><br><strong>${value}</strong></div>`);
+        };
+        
+        addItem('📐', 'Superficie', f.surface ? f.surface + ' m²' : null);
+        addItem('🛏️', 'Camere', f.bedrooms);
+        addItem('🚿', 'Bagni', f.bathrooms);
+        addItem('🏢', 'Piano', f.floor !== null && f.floor !== undefined ? f.floor + '°' : null);
+        addItem('📊', 'Classe energetica', f.epc_label ? f.epc_label + (f.primary_energy ? ' (' + f.primary_energy + ' kWh/m²)' : '') : null);
+        
+        const amen = f.amenities || {};
+        addItem('🛗', 'Ascensore', amen.Lift);
+        addItem('🏗️', 'Cantina', amen.Basement);
+        addItem('🏔️', 'Balcone', amen.Balcony);
+        addItem('🪴', 'Terrazzo', amen.Terrace);
+        addItem('🌿', 'Giardino', amen.Garden);
+        addItem('🅿️', 'Parcheggio indoor', f.parking_indoor);
+        addItem('🚗', 'Box auto', f.parking_closed_box);
+        addItem('🔑', 'Porta blindata', amen.ArmoredDoor);
+        addItem('📹', 'Videocitofono', amen.Visiophone || amen.DoorPhone);
+        addItem('👨‍💼', 'Portineria', amen.CaretakerOrConcierge);
+        addItem('🍳', 'Cucina', f.kitchen_type ? f.kitchen_type.replace('_', ' ').toLowerCase() : null);
+        addItem('🔥', 'Riscaldamento', f.heating_type ? f.heating_type.toLowerCase() : null);
+        addItem('🪟', 'Doppi vetri', f.has_double_glazing);
+        addItem('🏗️', 'Condizioni', f.condition ? f.condition.toLowerCase().replace('_', ' ') : null);
+        addItem('📅', 'Anno costruzione', f.construction_year);
+        
+        // Certificates
+        addItem('⚡', 'Conformità elettrica', f.has_electrical_compliance);
+        addItem('📋', 'Attestato amianto', f.has_asbestos_certificate);
+        
+        return items.join('');
+    }
+
+    async function showDetail(id) {
+        try {
+            detailBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-accent" role="status"></div></div>';
+            detailModal.show();
+
+            const res = await fetch(`/api/listings/${id}`);
+            const listing = await res.json();
+
+            // Store current listing ID for note and status actions
+            detailBody.dataset.listingId = id;
+            detailBody.dataset.isViewed = listing.is_viewed ? '1' : '0';
+            detailBody.dataset.isUnavailable = listing.is_unavailable ? '1' : '0';
+            detailBody.dataset.isExcluded = listing.excluded ? '1' : '0';
+
+            // Update modal buttons
+            updateDetailButtons(listing.is_viewed, listing.is_unavailable, listing.excluded);
+
+            const walkDist = listing.walking_distance;
+            const airDist = listing.distance_to_station;
+            let distanceText;
+            if (walkDist) {
+                distanceText = `🚶 ${formatDistance(walkDist)} (${Math.round(walkDist / 80)} min a piedi)`;
+            } else if (airDist) {
+                distanceText = `✈ ${formatDistance(airDist)} (in linea d'aria)`;
+            } else {
+                distanceText = 'Non disponibile';
+            }
+
+            const datePosted = formatDate(listing.date_posted);
+            const dateDiscovered = formatDate(listing.date_discovered);
+
+            const imageHtml = listing.image_url
+                ? `<img class="detail-image mb-3" src="${listing.image_url}" alt="" onerror="this.style.display='none'">`
+                : '';
+
+            const statusBadge = listing.is_unavailable
+                ? '<span class="badge bg-danger">Non disponibile</span>'
+                : listing.is_viewed
+                    ? '<span class="badge bg-success">Già visto</span>'
+                    : '<span class="badge bg-accent">Nuovo</span>';
+
+            detailBody.innerHTML = `
+                ${imageHtml}
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h4>${escapeHtml(listing.title || 'Appartamento')}</h4>
+                    ${statusBadge}
+                </div>
+                ${listing.address ? `<p class="text-muted"><i class="bi bi-geo-alt"></i> ${escapeHtml(listing.address)}</p>` : ''}
+                ${listing.description ? `<div class="mb-2" style="font-size:0.85rem; line-height:1.5; color:var(--bs-body-color);">${escapeHtml(listing.description)}</div>` : ''}
+                ${listing.features ? `<div class="mb-3"><hr class="my-2"><div class="fw-bold small mb-1">📋 Riassunto</div><div class="small" style="color:#b0b0b0; line-height:1.5;">${generateSummary(listing)}</div></div>` : ''}
+                ${listing.features ? `<div class="row g-1 mb-3" id="featuresContainer">${renderFeatures(listing.features)}</div>` : ''}
+                <div class="row mb-3">
+                    <div class="col-4 text-center">
+                        <div class="fs-3 fw-bold text-accent">€${listing.price}</div>
+                        <div class="small text-muted">al mese</div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fs-3 fw-bold">${listing.bedrooms || '?'}</div>
+                        <div class="small text-muted">camere</div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fs-3 fw-bold">${listing.surface_area ? listing.surface_area + 'm²' : '?'}</div>
+                        <div class="small text-muted">superficie</div>
+                    </div>
+                </div>
+                <hr>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <small class="text-muted">📅 Pubblicato: <strong>${datePosted}</strong></small>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">🔍 Scoperto: <strong>${dateDiscovered}</strong></small>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">🚶 Distanza dalla stazione: <strong>${distanceText}</strong></small>
+                </div>
+                ${listing.source ? `<div class="mb-2"><small class="text-muted">📡 Fonte: <strong>${listing.source}</strong></small></div>` : ''}
+                <div class="mt-3">
+                    <a href="#" onclick="event.preventDefault(); window.open('https://www.google.com/maps/dir/?api=1&origin=${CONFIG.guilleminsLat},${CONFIG.guilleminsLon}&destination=${listing.latitude},${listing.longitude}&travelmode=walking', '_blank', 'noopener');" class="btn btn-sm btn-outline-info">
+                        <i class="bi bi-google"></i> Verifica su Google Maps
+                    </a>
+                    <small class="text-muted ms-2">La distanza a piedi è calcolata con OpenStreetMap e può differire da Google Maps</small>
+                </div>
+                <div class="mb-2">
+                    <label class="filter-label">📝 Note personali</label>
+                    <textarea class="form-control" id="detailNotes" rows="3" style="background: #0f0f1a; border: 1px solid var(--card-border); color: var(--bs-body-color); font-size: 0.85rem;" placeholder="Scrivi qui le tue note su questo annuncio...">${escapeHtml(listing.notes || '')}</textarea>
+                    <button class="btn btn-sm btn-outline-accent mt-1" onclick="saveNotes()">
+                        <i class="bi bi-save"></i> Salva note
+                    </button>
+                </div>
+            `;
+
+            const openUrl = document.getElementById('detailOpenUrl');
+            if (listing.url) {
+                openUrl.href = listing.url;
+                openUrl.style.display = '';
+            } else {
+                openUrl.style.display = 'none';
+            }
+
+        } catch (err) {
+            console.error('Error loading detail:', err);
+            document.getElementById('detailBody').innerHTML = '<div class="alert alert-danger">Errore nel caricamento dei dettagli</div>';
+        }
+    }
+
+    // Status toggle functions
+    async function saveNotes() {
+        const body = document.getElementById('detailBody');
+        const id = parseInt(body.dataset.listingId);
+        if (!id) return;
+        const notes = document.getElementById('detailNotes').value;
+        try {
+            await fetch(`/api/listings/${id}/notes`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes }),
+            });
+            showToast('📝 Note salvate!', 'success');
+        } catch (err) {
+            showToast('Errore nel salvataggio delle note', 'error');
+        }
+    }
+
+    async function toggleViewed(id) {
+        try {
+            const listing = allListings.find(l => l.id === id);
+            if (!listing) return;
+            const newValue = !listing.is_viewed;
+            await fetch(`/api/listings/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'is_viewed', value: newValue }),
+            });
+            listing.is_viewed = newValue;
+            showToast(newValue ? 'Segnato come visto' : 'Segnato come non visto', 'success');
+            loadListings();
+        } catch (err) {
+            showToast('Errore nell\'aggiornamento', 'error');
+        }
+    }
+
+    async function toggleUnavailable(id) {
+        try {
+            const listing = allListings.find(l => l.id === id);
+            if (!listing) return;
+            const newValue = !listing.is_unavailable;
+            await fetch(`/api/listings/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'is_unavailable', value: newValue }),
+            });
+            listing.is_unavailable = newValue;
+            showToast(newValue ? 'Segnato come non disponibile' : 'Segnato come disponibile', 'warning');
+            loadListings();
+        } catch (err) {
+            showToast('Errore nell\'aggiornamento', 'error');
+        }
+    }
+
+    function updateDetailButtons(isViewed, isUnavailable, isExcluded) {
+        const btnViewed = document.getElementById('detailBtnViewed');
+        const btnUnavail = document.getElementById('detailBtnUnavailable');
+        const btnExclude = document.getElementById('detailBtnExclude');
+        if (btnViewed) {
+            btnViewed.innerHTML = isViewed ? '<i class="bi bi-eye-slash"></i> Non visto' : '<i class="bi bi-eye"></i> Visto';
+            btnViewed.className = isViewed ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-success';
+        }
+        if (btnUnavail) {
+            btnUnavail.innerHTML = isUnavailable ? '<i class="bi bi-check-circle"></i> Disponibile' : '<i class="bi bi-x-circle"></i> Non disp.';
+            btnUnavail.className = isUnavailable ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-danger';
+        }
+        if (btnExclude) {
+            btnExclude.innerHTML = isExcluded ? '<i class="bi bi-eye"></i> Ripristina' : '<i class="bi bi-eye-slash"></i> Nascondi';
+            btnExclude.className = isExcluded ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-warning';
+        }
+        const reasonDiv = document.getElementById('detailExcludeReason');
+        if (reasonDiv) reasonDiv.style.display = 'none';
+    }
+
+    async function toggleViewedFromDetail() {
+        const body = document.getElementById('detailBody');
+        const id = parseInt(body.dataset.listingId);
+        if (!id) return;
+        const isViewed = body.dataset.isViewed === '1';
+        const newValue = !isViewed;
+        try {
+            await fetch('/api/listings/' + id + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'is_viewed', value: newValue }),
+            });
+            body.dataset.isViewed = newValue ? '1' : '0';
+            updateDetailButtons(newValue, body.dataset.isUnavailable === '1', body.dataset.isExcluded === '1');
+            showToast(newValue ? '✅ Segnato come visto' : '👁️ Segnato come non visto', 'success');
+            loadListings();
+        } catch (err) { showToast('Errore', 'error'); }
+    }
+
+    async function toggleUnavailableFromDetail() {
+        const body = document.getElementById('detailBody');
+        const id = parseInt(body.dataset.listingId);
+        if (!id) return;
+        const isUnavailable = body.dataset.isUnavailable === '1';
+        const newValue = !isUnavailable;
+        try {
+            await fetch('/api/listings/' + id + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'is_unavailable', value: newValue }),
+            });
+            body.dataset.isUnavailable = newValue ? '1' : '0';
+            updateDetailButtons(body.dataset.isViewed === '1', newValue, body.dataset.isExcluded === '1');
+            showToast(newValue ? '❌ Segnato come non disponibile' : '✅ Segnato come disponibile', 'warning');
+            loadListings();
+        } catch (err) { showToast('Errore', 'error'); }
+    }
+
+    function toggleExcludeFromDetail() {
+        const body = document.getElementById('detailBody');
+        if (body.dataset.isExcluded === '1') {
+            // Already excluded - un-exclude
+            confirmExclude(true);
+        } else {
+            document.getElementById('detailExcludeReason').style.display = 'flex';
+        }
+    }
+
+    function cancelExclude() {
+        document.getElementById('detailExcludeReason').style.display = 'none';
+    }
+
+    async function confirmExclude(unexclude) {
+        const body = document.getElementById('detailBody');
+        const id = parseInt(body.dataset.listingId);
+        if (!id) return;
+        const reason = unexclude ? '' : document.getElementById('excludeReasonInput').value;
+        try {
+            await fetch('/api/listings/' + id + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'excluded', value: { excluded: !unexclude, reason: reason } }),
+            });
+            body.dataset.isExcluded = unexclude ? '0' : '1';
+            document.getElementById('detailExcludeReason').style.display = 'none';
+            document.getElementById('excludeReasonInput').value = '';
+            updateDetailButtons(body.dataset.isViewed === '1', body.dataset.isUnavailable === '1', !unexclude);
+            if (unexclude) {
+                showToast('Annuncio ripristinato', 'info');
+            } else {
+                showToast('Annuncio nascosto' + (reason ? ': ' + reason : ''), 'warning');
+            }
+            loadListings();
+        } catch (err) { showToast('Errore', 'error'); }
+    }
+
+    async function scrapeImmoweb() {
+        const btn = document.getElementById('scrapeBtn');
+        const progress = document.getElementById('scrapeProgress');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cerco...';
+        progress.classList.remove('d-none');
+
+        try {
+            const res = await fetch('/api/scrape', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ max_pages: 5 }),
+            });
+            const data = await res.json();
+            showToast(data.message, 'success');
+
+            // Wait a bit then refresh
+            setTimeout(async () => {
+                await loadListings();
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
+                progress.classList.add('d-none');
+                showToast('Annunci aggiornati!', 'success');
+            }, 3000);
+        } catch (err) {
+            showToast('Errore durante la ricerca', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
+            progress.classList.add('d-none');
+        }
+    }
+
+    async function refreshListings() {
+        const btn = event.currentTarget;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        await loadListings();
+        setTimeout(() => {
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+        }, 500);
+    }
+
+    // Panel toggle
+    function togglePanel() {
+        const panel = document.getElementById('listingsPanel');
+        const icon = document.getElementById('panelToggleIcon');
+        panel.classList.toggle('collapsed');
+        icon.classList.toggle('bi-chevron-right');
+        icon.classList.toggle('bi-chevron-left');
+        setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    // Add manual listing
+    function addManualListing() {
+        const form = document.getElementById('addForm');
+        const data = {};
+        const formData = new FormData(form);
+        for (const [key, value] of formData) {
+            if (value.trim()) {
+                if (key === 'price' || key === 'bedrooms') data[key] = parseInt(value);
+                else if (key === 'latitude' || key === 'longitude' || key === 'surface_area') data[key] = parseFloat(value);
+                else data[key] = value;
+            }
+        }
+
+        if (!data.title || !data.price) {
+            showToast('Titolo e prezzo sono obbligatori', 'error');
+            return;
+        }
+
+        fetch('/api/listings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        .then(res => res.json())
+        .then(() => {
+            addModal.hide();
+            showToast('Annuncio aggiunto!', 'success');
+            loadListings();
+        })
+        .catch(err => showToast('Errore nell\'aggiunta', 'error'));
+    }
+
+    // Stats
+    async function updateStats() {
+        try {
+            const res = await fetch('/api/stats');
+            const stats = await res.json();
+            document.getElementById('statsTotal').textContent = stats.total;
+        } catch (err) {
+            // Ignore
+        }
+    }
+
+    // Open Google Maps walking directions
+    function openGoogleMaps(lat, lon) {
+        if (!lat || !lon) return;
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${CONFIG.guilleminsLat},${CONFIG.guilleminsLon}&destination=${lat},${lon}&travelmode=walking`;
+        window.open(url, '_blank', 'noopener');
+    }
+
+    // Utility functions
+    function formatDistance(meters) {
+        if (!meters) return '?';
+        if (meters < 1000) return `${Math.round(meters)}m`;
+        return `${(meters / 1000).toFixed(1)}km`;
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return 'Sconosciuta';
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            const now = new Date();
+            const diff = now - d;
+            const days = Math.floor(diff / 86400000);
+            if (days === 0) return 'Oggi';
+            if (days === 1) return 'Ieri';
+            if (days < 7) return `${days} giorni fa`;
+            if (days < 30) return `${Math.floor(days / 7)} settimane fa`;
+            return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' });
+        } catch {
+            return dateStr;
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function showToast(message, type = 'info') {
+        const container = document.querySelector('.toast-container');
+        const colors = {
+            success: '#00c853',
+            error: '#ff1744',
+            warning: '#ffd600',
+            info: '#6c63ff',
+        };
+        const icons = {
+            success: 'bi-check-circle-fill',
+            error: 'bi-exclamation-circle-fill',
+            warning: 'bi-exclamation-triangle-fill',
+            info: 'bi-info-circle-fill',
+        };
+        const color = colors[type] || colors.info;
+        const icon = icons[type] || icons.info;
+
+        const toast = document.createElement('div');
+        toast.className = 'toast align-items-center border-0 show animate__animated animate__fadeInUp';
+        toast.style.background = '#1a1a2e';
+        toast.style.borderLeft = `4px solid ${color}`;
+        toast.role = 'alert';
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi ${icon}" style="color: ${color}"></i> ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>`;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.remove('animate__fadeInUp');
+            toast.classList.add('animate__fadeOutDown');
+            setTimeout(() => toast.remove(), 500);
+        }, 4000);
+    }
+</script>
+
+<style>
+    .btn-accent {
+        background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+        border: none;
+        color: #fff;
+    }
+    .btn-accent:hover {
+        background: linear-gradient(135deg, var(--accent-light), var(--accent));
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(108, 99, 255, 0.4);
+    }
+    .btn-outline-accent {
+        border: 1px solid var(--accent);
+        color: var(--accent-light);
+    }
+    .btn-outline-accent:hover {
+        background: var(--accent);
+        color: #fff;
+    }
+    .btn-xs {
+        padding: 0.15rem 0.4rem;
+        font-size: 0.7rem;
+        line-height: 1.2;
+    }
+    .text-accent {
+        color: var(--accent-light);
+    }
+    .bg-accent {
+        background: var(--accent);
+    }
+    .form-check-input:checked {
+        background-color: var(--accent);
+        border-color: var(--accent);
+    }
+    /* Leaflet overrides for dark theme */
+    .leaflet-popup-content-wrapper {
+        background: var(--card-bg);
+        color: var(--bs-body-color);
+        border: 1px solid var(--card-border);
+    }
+    .leaflet-popup-tip {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+    }
+    .leaflet-control-zoom a {
+        background: var(--card-bg);
+        color: var(--bs-body-color);
+        border-color: var(--card-border);
+    }
+    .leaflet-control-zoom a:hover {
+        background: #2a2a4a;
+    }
+    /* Tooltip styling */
+    .leaflet-tooltip {
+        background: rgba(26, 26, 46, 0.95);
+        border: 1px solid var(--card-border);
+        color: var(--bs-body-color);
+        backdrop-filter: blur(4px);
+    }
+    .leaflet-tooltip-top:before {
+        border-top-color: rgba(26, 26, 46, 0.95);
+    }
+</style>
+</body>
+</html>
