@@ -40,6 +40,7 @@ class _TursoConnection:
 
     def __init__(self, conn):
         self._conn = conn
+        self._last_cursor = None
 
     def cursor(self):
         return self
@@ -47,7 +48,8 @@ class _TursoConnection:
     def execute(self, sql, params=None):
         result = self._conn.execute(sql, params or ())
         columns = [d[0] for d in result.description] if result.description else []
-        return _TursoCursor(result, columns)
+        self._last_cursor = _TursoCursor(result, columns)
+        return self._last_cursor
 
     def executescript(self, script):
         self._conn.executescript(script)
@@ -57,6 +59,20 @@ class _TursoConnection:
 
     def close(self):
         pass
+
+    @property
+    def rowcount(self):
+        return self._last_cursor.rowcount if self._last_cursor else -1
+
+    @property
+    def lastrowid(self):
+        return self._last_cursor.lastrowid if self._last_cursor else None
+
+    def fetchone(self):
+        return self._last_cursor.fetchone() if self._last_cursor else None
+
+    def fetchall(self):
+        return self._last_cursor.fetchall() if self._last_cursor else None
 
 
 class _TursoCursor:
