@@ -230,6 +230,16 @@
             box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.3);
         }
 
+        .listing-card.new {
+            border-color: #ff9100;
+            border-width: 1.5px;
+        }
+
+        .listing-card.new:hover {
+            border-color: #ffab40;
+            box-shadow: 0 0 12px rgba(255, 145, 0, 0.15);
+        }
+
         .listing-card.viewed {
             opacity: 0.6;
             border-color: #333;
@@ -490,11 +500,74 @@
             left: 0;
             right: 0;
             z-index: 9999;
+            background: rgba(22, 22, 42, 0.95);
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .scrape-progress .progress {
+            flex: 1;
+            height: 6px;
+            background: #2a2a4a;
         }
 
         .scrape-progress .progress-bar {
             background: linear-gradient(90deg, var(--accent), var(--accent-light));
-            height: 3px;
+        }
+
+        .scrape-progress small {
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* Bulk selection */
+        .listing-checkbox {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+        }
+
+        .checkbox-col {
+            padding-top: 0.25rem;
+            cursor: pointer;
+            flex-shrink: 0;
+            width: 20px;
+        }
+
+        .listing-card.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.35);
+        }
+
+        .bulk-toolbar {
+            position: sticky;
+            bottom: 0;
+            background: rgba(22, 22, 42, 0.95);
+            backdrop-filter: blur(8px);
+            border-top: 1px solid var(--card-border);
+            padding: 0.5rem 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            z-index: 100;
+        }
+
+        .bulk-toolbar .btn {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .bulk-toolbar .selected-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent-light);
+            margin-right: 0.5rem;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -516,7 +589,10 @@
 
 <!-- Progress bar for scraping -->
 <div class="scrape-progress d-none" id="scrapeProgress">
-    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+    <div class="progress">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+    </div>
+    <small class="text-muted mt-1" id="scrapeStatusText">Cerco nuovi annunci...</small>
 </div>
 
 <!-- Header -->
@@ -534,6 +610,9 @@
         <button class="btn btn-sm btn-outline-secondary" onclick="refreshListings()" title="Aggiorna">
             <i class="bi bi-arrow-clockwise"></i>
         </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="importByUrl()" title="Aggiungi annuncio manualmente da URL">
+            <i class="bi bi-link-45deg"></i>
+        </button>
         <button class="btn btn-sm btn-accent" onclick="scrapeImmoweb()" title="Cerca nuovi annunci su Immoweb" id="scrapeBtn">
             <i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>
         </button>
@@ -547,8 +626,8 @@
         <div id="map"></div>
         <div class="map-legend d-none d-md-block">
             <div class="legend-item">
-                <span class="legend-dot" style="background: var(--accent);"></span>
-                <span>Disponibile</span>
+                <span class="legend-dot" style="background: #ff9100;"></span>
+                <span>Nuovo</span>
             </div>
             <div class="legend-item">
                 <span class="legend-dot" style="background: var(--success);"></span>
@@ -632,11 +711,28 @@
             <div class="empty-state">
                 <i class="bi bi-search-heart"></i>
                 <h6>Nessun annuncio trovato</h6>
-                <p class="small">Clicca "Cerca su Immoweb" per importare gli annunci<br>oppure aggiungili manualmente.</p>
+                <p class="small">Clicca "Cerca su Immoweb" per importare gli annunci<br>oppure <a href="#" onclick="importByUrl();return false">aggiungili manualmente</a>.</p>
                 <button class="btn btn-accent btn-sm" onclick="scrapeImmoweb()">
                     <i class="bi bi-search-heart"></i> Cerca su Immoweb
                 </button>
             </div>
+        </div>
+
+        <!-- Bulk Action Toolbar -->
+        <div id="bulkToolbar" class="bulk-toolbar d-none">
+            <span class="selected-label"><span id="selectedCount">0</span> selezionati</span>
+            <button class="btn btn-outline-success" onclick="bulkAction('is_viewed', true)">
+                <i class="bi bi-eye"></i> Visto
+            </button>
+            <button class="btn btn-outline-warning" onclick="bulkAction('is_new', false)">
+                <i class="bi bi-star"></i> Non nuovo
+            </button>
+            <button class="btn btn-outline-danger" onclick="bulkAction('is_unavailable', true)">
+                <i class="bi bi-x-circle"></i> Non disp.
+            </button>
+            <button class="btn btn-outline-secondary ms-auto" onclick="selectedIds.clear(); updateBulkToolbar(); renderListings(allListings)">
+                Deseleziona
+            </button>
         </div>
     </div>
 
@@ -975,6 +1071,46 @@
         }
     }
 
+    let selectedIds = new Set();
+
+    function toggleSelect(id) {
+        if (selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        updateBulkToolbar();
+        // Update card visual
+        const card = document.querySelector(`.listing-card[data-id="${id}"]`);
+        if (card) card.classList.toggle('selected', selectedIds.has(id));
+    }
+
+    function updateBulkToolbar() {
+        const bar = document.getElementById('bulkToolbar');
+        const count = document.getElementById('selectedCount');
+        if (selectedIds.size === 0) {
+            bar.classList.add('d-none');
+            return;
+        }
+        bar.classList.remove('d-none');
+        count.textContent = selectedIds.size;
+    }
+
+    async function bulkAction(field, value) {
+        if (selectedIds.size === 0) return;
+        const ids = Array.from(selectedIds);
+        try {
+            await fetch('/api/listings/bulk-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, field, value }),
+            });
+            selectedIds.clear();
+            updateBulkToolbar();
+            showToast(`Aggiornati ${ids.length} annunci`, 'success');
+            loadListings();
+        } catch (err) {
+            showToast('Errore operazione bulk', 'error');
+        }
+    }
+
     function renderListings(listings) {
         const container = document.getElementById('listingsContainer');
         document.getElementById('resultCount').textContent = `${listings.length} risultati`;
@@ -991,9 +1127,16 @@
 
         let html = '';
         for (const listing of listings) {
+            const isNew = listing.is_new ? true : false;
             const isViewed = listing.is_viewed;
             const isUnavailable = listing.is_unavailable;
             const isActive = currentHighlightId === listing.id;
+            const isSelected = selectedIds.has(listing.id);
+
+            let cardClass = '';
+            if (isUnavailable) cardClass = 'unavailable';
+            else if (isNew) cardClass = 'new';
+            else if (isViewed) cardClass = 'viewed';
 
             const walkDist = listing.walking_distance;
             const airDist = listing.distance_to_station;
@@ -1010,40 +1153,49 @@
                 : `<div class="card-image-placeholder"><i class="bi bi-house"></i></div>`;
 
             html += `
-                <div class="listing-card ${isViewed ? 'viewed' : ''} ${isUnavailable ? 'unavailable' : ''} ${isActive ? 'active' : ''}"
+                <div class="listing-card ${cardClass} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}"
                      onclick="highlightListing(${listing.id})"
                      ondblclick="showDetail(${listing.id})"
                      data-id="${listing.id}">
-                    <div class="row g-2">
-                        <div class="col-4">
-                            ${imageHtml}
+                    <div class="d-flex align-items-start gap-2">
+                        <div class="checkbox-col" onclick="event.stopPropagation(); toggleSelect(${listing.id})">
+                            <input type="checkbox" class="listing-checkbox" ${isSelected ? 'checked' : ''}>
                         </div>
-                        <div class="col-8">
-                            ${isUnavailable ? '<span class="card-badge badge bg-danger">Non disponibile</span>' : ''}
-                            ${isViewed && !isUnavailable ? '<span class="card-badge badge bg-secondary">Visto</span>' : ''}
-                            <div class="card-title">${escapeHtml(listing.title || 'Appartamento')}</div>
-                            <div class="card-address"><i class="bi bi-geo-alt"></i> ${escapeHtml(listing.address || 'Liège')}</div>
-                            <div class="card-details">
-                                <span><i class="bi bi-euro"></i> ${listing.price}/mese</span>
-                                <span><i class="bi bi-door-open"></i> ${listing.bedrooms || '?'} cam.</span>
-                                <span class="distance-tag ${distanceClass}"><i class="bi bi-signpost-2"></i> ${distanceText}</span>
+                        <div class="row g-2 flex-grow-1">
+                            <div class="col-4">
+                                ${imageHtml}
                             </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="date-tag"><i class="bi bi-calendar3"></i> ${dateText}</span>
-                                <span class="card-actions">
-                                    <button class="btn btn-outline-success btn-xs" onclick="event.stopPropagation(); toggleViewed(${listing.id})" title="${isViewed ? 'Segna come non visto' : 'Segna come visto'}">
-                                        <i class="bi ${isViewed ? 'bi-eye-slash' : 'bi-eye'}"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-xs" onclick="event.stopPropagation(); toggleUnavailable(${listing.id})" title="${isUnavailable ? 'Segna come disponibile' : 'Segna come non disponibile'}">
-                                        <i class="bi ${isUnavailable ? 'bi-check-circle' : 'bi-x-circle'}"></i>
-                                    </button>
-                                    <a href="#" onclick="event.stopPropagation(); openGoogleMaps(${listing.latitude}, ${listing.longitude})" class="btn btn-outline-info btn-xs" title="Percorso su Google Maps">
-                                        <i class="bi bi-map"></i>
-                                    </a>
-                                    <a href="${listing.url || '#'}" target="_blank" rel="noopener" class="btn btn-outline-accent btn-xs" onclick="event.stopPropagation();" title="Apri annuncio originale">
-                                        <i class="bi bi-box-arrow-up-right"></i>
-                                    </a>
-                                </span>
+                            <div class="col-8">
+                                ${isUnavailable ? '<span class="card-badge badge bg-danger">Non disponibile</span>' : ''}
+                                ${isNew && !isUnavailable ? '<span class="card-badge badge" style="background:#ff9100;">Nuovo</span>' : ''}
+                                ${isViewed && !isNew && !isUnavailable ? '<span class="card-badge badge bg-secondary">Visto</span>' : ''}
+                                <div class="card-title">Annuncio #${listing.listing_number || listing.id}</div>
+                                <div class="card-address"><i class="bi bi-geo-alt"></i> ${escapeHtml(listing.address || 'Liège')}</div>
+                                <div class="card-details">
+                                    <span><i class="bi bi-euro"></i> ${listing.price}/mese</span>
+                                    <span><i class="bi bi-door-open"></i> ${listing.bedrooms || '?'} cam.</span>
+                                    <span class="distance-tag ${distanceClass}"><i class="bi bi-signpost-2"></i> ${distanceText}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="date-tag"><i class="bi bi-calendar3"></i> ${dateText}</span>
+                                    <span class="card-actions">
+                                        ${isNew && !isUnavailable ? `<button class="btn btn-outline-warning btn-xs" onclick="event.stopPropagation(); clearNew(${listing.id})" title="Segna come non nuovo">
+                                            <i class="bi bi-star"></i>
+                                        </button>` : ''}
+                                        <button class="btn btn-outline-success btn-xs" onclick="event.stopPropagation(); toggleViewed(${listing.id})" title="${isViewed ? 'Segna come non visto' : 'Segna come visto'}">
+                                            <i class="bi ${isViewed ? 'bi-eye-slash' : 'bi-eye'}"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-xs" onclick="event.stopPropagation(); toggleUnavailable(${listing.id})" title="${isUnavailable ? 'Segna come disponibile' : 'Segna come non disponibile'}">
+                                            <i class="bi ${isUnavailable ? 'bi-check-circle' : 'bi-x-circle'}"></i>
+                                        </button>
+                                        <a href="#" onclick="event.stopPropagation(); openGoogleMaps(${listing.latitude}, ${listing.longitude})" class="btn btn-outline-info btn-xs" title="Percorso su Google Maps">
+                                            <i class="bi bi-map"></i>
+                                        </a>
+                                        <a href="${listing.url || '#'}" target="_blank" rel="noopener" class="btn btn-outline-accent btn-xs" onclick="event.stopPropagation();" title="Apri annuncio originale">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </a>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1067,16 +1219,18 @@
             // Skip excluded listings on the map
             if (isExcluded) continue;
 
+            const isNew = listing.is_new ? true : false;
             let color = '#6c63ff'; // available
-            let pulse = false;
             if (isUnavailable) {
                 color = '#ff1744'; // unavailable
+            } else if (isNew) {
+                color = '#ff9100'; // nuovo
             } else if (isViewed) {
                 color = '#00c853'; // viewed
             }
 
             const marker = L.circleMarker([listing.latitude, listing.longitude], {
-                radius: isUnavailable ? 6 : 8,
+                radius: isUnavailable ? 6 : (isNew ? 10 : 8),
                 fillColor: color,
                 color: '#fff',
                 weight: 2,
@@ -1092,19 +1246,29 @@
 
             let statusIcon = '';
             if (isUnavailable) statusIcon = '❌ ';
+            else if (isNew) statusIcon = '🆕 ';
             else if (isViewed) statusIcon = '👁️ ';
 
             marker.bindTooltip(`
                 <div style="font-size: 13px;">
-                    <strong>${statusIcon}${escapeHtml(listing.title || 'Appartamento')}</strong><br>
+                    <strong>${statusIcon}Annuncio #${listing.listing_number || listing.id}</strong><br>
                     €${listing.price}/mese · ${listing.bedrooms || '?'} camere<br>
                     📍 ${distanceText} dalla stazione<br>
                     <em style="font-size: 11px; color: #888;">Clicca per dettagli</em>
                 </div>
             `, { direction: 'top' });
 
-            marker.on('click', (e) => {
+            marker.on('click', async (e) => {
                 L.DomEvent.stopPropagation(e);
+                if (!isViewed && !isUnavailable) {
+                    await fetch(`/api/listings/${listing.id}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ field: 'is_viewed', value: true }),
+                    });
+                    listing.is_viewed = true;
+                    marker.setStyle({ fillColor: '#00c853', radius: 8 });
+                }
                 highlightListing(listing.id);
                 showDetail(listing.id);
             });
@@ -1321,16 +1485,19 @@
                 ? `<img class="detail-image mb-3" src="${listing.image_url}" alt="" onerror="this.style.display='none'">`
                 : '';
 
+            const isNewDetail = listing.is_new ? true : false;
             const statusBadge = listing.is_unavailable
                 ? '<span class="badge bg-danger">Non disponibile</span>'
-                : listing.is_viewed
-                    ? '<span class="badge bg-success">Già visto</span>'
-                    : '<span class="badge bg-accent">Nuovo</span>';
+                : isNewDetail
+                    ? '<span class="badge" style="background:#ff9100;">Nuovo</span>'
+                    : listing.is_viewed
+                        ? '<span class="badge bg-success">Già visto</span>'
+                        : '';
 
             detailBody.innerHTML = `
                 ${imageHtml}
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h4>${escapeHtml(listing.title || 'Appartamento')}</h4>
+                    <h4>Annuncio #${listing.listing_number || listing.id}</h4>
                     ${statusBadge}
                 </div>
                 ${listing.address ? `<p class="text-muted"><i class="bi bi-geo-alt"></i> ${escapeHtml(listing.address)}</p>` : ''}
@@ -1411,6 +1578,23 @@
         }
     }
 
+    async function clearNew(id) {
+        try {
+            const listing = allListings.find(l => l.id === id);
+            if (!listing) return;
+            await fetch(`/api/listings/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: 'is_new', value: false }),
+            });
+            listing.is_new = false;
+            showToast('Segnato come non nuovo', 'info');
+            loadListings();
+        } catch (err) {
+            showToast('Errore nell\'aggiornamento', 'error');
+        }
+    }
+
     async function toggleViewed(id) {
         try {
             const listing = allListings.find(l => l.id === id);
@@ -1422,6 +1606,7 @@
                 body: JSON.stringify({ field: 'is_viewed', value: newValue }),
             });
             listing.is_viewed = newValue;
+            if (newValue) listing.is_new = false;
             showToast(newValue ? 'Segnato come visto' : 'Segnato come non visto', 'success');
             loadListings();
         } catch (err) {
@@ -1440,6 +1625,7 @@
                 body: JSON.stringify({ field: 'is_unavailable', value: newValue }),
             });
             listing.is_unavailable = newValue;
+            if (newValue) listing.is_new = false;
             showToast(newValue ? 'Segnato come non disponibile' : 'Segnato come disponibile', 'warning');
             loadListings();
         } catch (err) {
@@ -1546,9 +1732,11 @@
     async function scrapeImmoweb() {
         const btn = document.getElementById('scrapeBtn');
         const progress = document.getElementById('scrapeProgress');
+        const statusText = document.getElementById('scrapeStatusText');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cerco...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cerco nuovi...';
         progress.classList.remove('d-none');
+        statusText.textContent = 'Cerco nuovi annunci su Immoweb...';
 
         try {
             const res = await fetch('/api/scrape', {
@@ -1556,16 +1744,49 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ max_pages: 5 }),
             });
-            const data = await res.json();
-            showToast(data.message, 'success');
 
-            // Wait a bit then refresh
-            setTimeout(async () => {
-                await loadListings();
+            if (res.status === 409) {
+                showToast('Scrape già in corso', 'warning');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
                 progress.classList.add('d-none');
-                showToast('Annunci aggiornati!', 'success');
+                return;
+            }
+
+            // Poll status until complete
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch('/api/scrape/status');
+                    const status = await statusRes.json();
+
+                    if (status.status === 'running') {
+                        if (status.new > 0) {
+                            statusText.textContent = `Trovati ${status.new} nuovi annunci, recupero dettagli...`;
+                            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Recupero dettagli...`;
+                        } else if (status.found > 0) {
+                            statusText.textContent = `Trovati ${status.found} annunci, controllo quali sono nuovi...`;
+                        }
+                    } else if (status.status === 'done') {
+                        clearInterval(pollInterval);
+                        await loadListings();
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
+                        progress.classList.add('d-none');
+                        if (status.processed > 0) {
+                            showToast(`Trovati ${status.processed} nuovi annunci!`, 'success');
+                        } else {
+                            showToast('Nessun nuovo annuncio trovato', 'info');
+                        }
+                    } else if (status.status === 'failed') {
+                        clearInterval(pollInterval);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
+                        progress.classList.add('d-none');
+                        showToast('Errore: ' + (status.error || 'scrape fallito'), 'error');
+                    }
+                } catch (pollErr) {
+                    // Ignore polling errors, keep trying
+                }
             }, 3000);
         } catch (err) {
             showToast('Errore durante la ricerca', 'error');
@@ -1573,6 +1794,35 @@
             btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
             progress.classList.add('d-none');
         }
+    }
+
+    async function importByUrl() {
+        const url = prompt('Incolla l\'URL dell\'annuncio Immoweb:');
+        if (!url) return;
+
+        const btn = document.getElementById('scrapeBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importo...';
+
+        try {
+            const res = await fetch('/api/listings/import-by-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message, 'success');
+                await loadListings();
+            } else {
+                showToast(data.error || 'Errore importazione', 'error');
+            }
+        } catch (err) {
+            showToast('Errore durante l\'importazione', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-search-heart"></i> <span class="d-none d-md-inline">Cerca su Immoweb</span>';
     }
 
     async function refreshListings() {

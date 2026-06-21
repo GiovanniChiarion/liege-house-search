@@ -53,6 +53,21 @@ def init_db():
         );
     """)
 
+    # Migrate: add is_new and listing_number columns (safe if already exist)
+    for col_sql in [
+        "ALTER TABLE listings ADD COLUMN is_new INTEGER DEFAULT 1",
+        "ALTER TABLE listings ADD COLUMN listing_number INTEGER",
+    ]:
+        try:
+            cursor.execute(col_sql)
+        except Exception:
+            pass
+    # Backfill: existing listings (pre-feature) should not be marked as new
+    cursor.execute("UPDATE listings SET listing_number = id WHERE listing_number IS NULL")
+    # Normalize is_new: convert text '0'/'1' to integer, set NULL/1 to 0 for old listings
+    cursor.execute("UPDATE listings SET is_new = CAST(is_new AS INTEGER) WHERE typeof(is_new) = 'text'")
+    cursor.execute("UPDATE listings SET is_new = 0 WHERE is_new = 1 AND date_discovered < date('now')")
+    cursor.execute("UPDATE listings SET is_new = 0 WHERE is_new IS NULL")
     conn.commit()
     conn.close()
 
@@ -133,11 +148,15 @@ def add_listing(listing_data):
         conn.close()
         return existing["id"]
 
+    # Assign listing_number for new listings
+    cursor.execute("SELECT COALESCE(MAX(listing_number), 0) + 1 FROM listings")
+    next_number = cursor.fetchone()[0]
+
     fields = [
         "external_id", "title", "description", "price", "bedrooms",
         "surface_area", "address", "latitude", "longitude", "url",
         "source", "image_url", "date_posted", "distance_to_station",
-        "date_discovered"
+        "date_discovered", "listing_number"
     ]
     placeholders = ", ".join(["?" for _ in fields])
     column_names = ", ".join(fields)
@@ -146,6 +165,8 @@ def add_listing(listing_data):
     for field in fields:
         if field == "date_discovered":
             values.append(datetime.now().isoformat())
+        elif field == "listing_number":
+            values.append(next_number)
         else:
             values.append(listing_data.get(field))
 
@@ -197,7 +218,14 @@ def get_all_listings(filters=None):
     rows = cursor.fetchall()
     conn.close()
 
-    return [dict(row) for row in rows]
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['is_new'] = int(d['is_new']) if d.get('is_new') is not None else 0
+        d['is_viewed'] = int(d['is_viewed']) if d.get('is_viewed') is not None else 0
+        d['is_unavailable'] = int(d['is_unavailable']) if d.get('is_unavailable') is not None else 0
+        result.append(d)
+    return result
 
 
 def get_listing(listing_id):
@@ -207,12 +235,18 @@ def get_listing(listing_id):
     cursor.execute("SELECT * FROM listings WHERE id = ?", (listing_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    if row:
+        d = dict(row)
+        d['is_new'] = int(d['is_new']) if d.get('is_new') is not None else 0
+        d['is_viewed'] = int(d['is_viewed']) if d.get('is_viewed') is not None else 0
+        d['is_unavailable'] = int(d['is_unavailable']) if d.get('is_unavailable') is not None else 0
+        return d
+    return None
 
 
 def update_listing_status(listing_id, field, value):
     """Update a status field on a listing."""
-    allowed_fields = ["is_viewed", "is_unavailable", "is_rented", "excluded"]
+    allowed_fields = ["is_viewed", "is_unavailable", "is_rented", "excluded", "is_new"]
     if field not in allowed_fields:
         raise ValueError(f"Field must be one of {allowed_fields}")
 
@@ -234,6 +268,45 @@ def update_listing_status(listing_id, field, value):
             f"UPDATE listings SET {field} = ?, last_checked = datetime('now') WHERE id = ?",
             (1 if value else 0, listing_id)
         )
+        # Auto-clear is_new when marking as viewed or unavailable
+        if field in ('is_viewed', 'is_unavailable') and value:
+            cursor.execute(
+                "UPDATE listings SET is_new = 0 WHERE id = ?",
+                (listing_id,)
+            )
+    conn.commit()
+    conn.close()
+
+
+def bulk_update_status(ids, field, value):
+    """Update a status field on multiple listings."""
+    allowed_fields = ["is_viewed", "is_unavailable", "is_rented", "excluded", "is_new"]
+    if field not in allowed_fields:
+        raise ValueError(f"Field must be one of {allowed_fields}")
+    if not ids:
+        return
+
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ", ".join(["?" for _ in ids])
+    bool_val = 1 if value else 0
+
+    if field == "excluded":
+        cursor.execute(
+            f"UPDATE listings SET excluded = ?, exclusion_reason = '', last_checked = datetime('now') WHERE id IN ({placeholders})",
+            (bool_val, *ids)
+        )
+    else:
+        cursor.execute(
+            f"UPDATE listings SET {field} = ?, last_checked = datetime('now') WHERE id IN ({placeholders})",
+            (bool_val, *ids)
+        )
+        # Auto-clear is_new when marking as viewed or unavailable
+        if field in ('is_viewed', 'is_unavailable') and value:
+            cursor.execute(
+                f"UPDATE listings SET is_new = 0 WHERE id IN ({placeholders})",
+                (*ids,)
+            )
     conn.commit()
     conn.close()
 

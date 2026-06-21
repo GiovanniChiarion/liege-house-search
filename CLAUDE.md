@@ -15,7 +15,13 @@ Web app to find rental apartments within 10 min walk of **Liège-Guillemins stat
 - [x] Google Maps verification button for walking directions
 - [x] Sort: distance, price ↑/↓, date, bedrooms
 - [x] "A piedi max" numeric input (minutes → meters: 1 min = 80m)
-- [x] Status toggles: Visto / Non disponibile / Nascondi
+- [x] Status toggles: Visto / Non nuovo / Non disponibile / Nascondi
+- [x] **Stato "Nuovo"** separato da `is_viewed` (campo `is_new`) — persiste fino a azione manuale
+- [x] **Titoli stabili** numerati (`Annuncio #N`) — numero progressivo mai cambiato
+- [x] **Selezione bulk** con checkbox sulle card + toolbar azioni di massa (Visto / Non nuovo / Non disp.)
+- [x] **Click marker** setta `is_viewed` (tracciamento) ma non toglie lo stato "Nuovo"
+- [x] **Marker ambra** per annunci nuovi, **verde** per già visti
+- [x] **Badge "Nuovo"** ambra su card e modale per annunci non ancora gestiti
 - [x] Exclusion with optional reason
 - [x] Per-user notes (shared for now)
 - [x] "Mostra visti / Mostra non disp. / Mostra esclusi" toggles
@@ -54,7 +60,7 @@ Web app to find rental apartments within 10 min walk of **Liège-Guillemins stat
 - **Dev**: `data/listings.db` — SQLite with WAL mode
 - **Prod**: Turso cloud (`liege-house-search-gchiarion.aws-eu-west-1.turso.io`)
 - **Tables**: `listings` (all listing data), `users` (auth)
-- `listings` columns: id, external_id, title, description, price, bedrooms, surface_area, address, latitude, longitude, url, source, image_url, date_posted, date_discovered, distance_to_station, is_rented, is_viewed, is_unavailable, walking_distance, walking_route, notes (TEXT), available_date, excluded, exclusion_reason, features (JSON), last_checked
+- `listings` columns: id, external_id, title, description, price, bedrooms, surface_area, address, latitude, longitude, url, source, image_url, date_posted, date_discovered, distance_to_station, is_rented, is_viewed, is_unavailable, walking_distance, walking_route, notes (TEXT), available_date, excluded, exclusion_reason, features (JSON), last_checked, is_new, listing_number
 - Auto-switch: se `TURSO_URL` e `TURSO_AUTH_TOKEN` sono impostati → usa Turso, altrimenti SQLite locale
 
 ### Users
@@ -94,6 +100,7 @@ Web app to find rental apartments within 10 min walk of **Liège-Guillemins stat
 | GET | /api/stats | Yes | DB statistics |
 | POST | /api/scrape | Yes | Trigger Immoweb scrape |
 | POST | /api/listings/import | Yes | Import listings |
+| POST | /api/listings/bulk-status | Yes | Bulk update status for multiple listings |
 | GET | /api/config | Yes | App configuration |
 
 ### Running (Development)

@@ -16,7 +16,19 @@ from flask_cors import CORS
 from config import GUILLEMINS_LAT, GUILLEMINS_LON, MAX_WALK_DISTANCE_METERS
 from models import init_db, get_all_listings, get_listing, \
     add_listing, update_listing_status, delete_listing, get_stats, \
-    authenticate_user, get_user
+    bulk_update_status, authenticate_user, get_user
+
+# Scrape state tracker
+_scrape_lock = threading.Lock()
+_scrape_state = {
+    'status': 'idle',
+    'found': 0,
+    'new': 0,
+    'processed': 0,
+    'error': None,
+    'started_at': None,
+    'finished_at': None,
+}
 
 # Configure logging
 logging.basicConfig(
@@ -172,6 +184,33 @@ def api_update_status(listing_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/listings/bulk-status', methods=['POST'])
+@login_required
+def api_bulk_status():
+    """Update a status field on multiple listings."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    ids = data.get('ids', [])
+    field = data.get('field')
+    value = data.get('value', True)
+
+    if not ids or not isinstance(ids, list):
+        return jsonify({'error': 'ids must be a non-empty array'}), 400
+    if not field:
+        return jsonify({'error': 'No field specified'}), 400
+
+    try:
+        bulk_update_status(ids, field, value)
+        return jsonify({'message': f'Aggiornati {len(ids)} annunci'})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error in bulk status update: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/listings/<int:listing_id>/notes', methods=['PATCH'])
 @login_required
 def api_update_notes(listing_id):
@@ -274,9 +313,20 @@ def api_stats():
 @login_required
 def api_scrape():
     """Trigger scraping of Immoweb listings.
-    Uses the map area filter around Guillemins.
+    Only processes new listings not already in the database.
     """
     from scrape_map_area import scrape_map_search, enrich_with_details
+
+    with _scrape_lock:
+        if _scrape_state['status'] == 'running':
+            return jsonify({'message': 'Scrape già in corso'}), 409
+        _scrape_state['status'] = 'running'
+        _scrape_state['found'] = 0
+        _scrape_state['new'] = 0
+        _scrape_state['processed'] = 0
+        _scrape_state['error'] = None
+        _scrape_state['started_at'] = datetime.now().isoformat()
+        _scrape_state['finished_at'] = None
 
     data = request.get_json() or {}
     max_listings = data.get('max_listings', 50)
@@ -284,10 +334,30 @@ def api_scrape():
     def run_scrape():
         try:
             listings = scrape_map_search()
+            with _scrape_lock:
+                _scrape_state['found'] = len(listings)
+
             if listings:
-                enrich_with_details(listings, max_listings=max_listings)
+                existing_ids = set()
+                for l in get_all_listings():
+                    if l.get('external_id'):
+                        existing_ids.add(l['external_id'])
+
+                new_listings = [l for l in listings if l['id'] not in existing_ids]
+
+                with _scrape_lock:
+                    _scrape_state['new'] = len(new_listings)
+
+                if not new_listings:
+                    logger.info("No new listings found")
+                    with _scrape_lock:
+                        _scrape_state['status'] = 'done'
+                        _scrape_state['finished_at'] = datetime.now().isoformat()
+                    return
+
+                enrich_with_details(new_listings, max_listings=max_listings)
                 count = 0
-                for listing in listings:
+                for listing in new_listings:
                     if listing.get('latitude') and listing.get('longitude'):
                         data = {
                             'external_id': listing['id'],
@@ -309,16 +379,35 @@ def api_scrape():
                             count += 1
                         except Exception as e:
                             logger.warning(f"Error saving listing {listing.get('id')}: {e}")
-                logger.info(f"Scrape complete: {count} new/updated listings")
+                    with _scrape_lock:
+                        _scrape_state['processed'] = count
+                logger.info(f"Scrape complete: {count} new listings saved")
             else:
                 logger.warning("No listings found from map search")
+
+            with _scrape_lock:
+                _scrape_state['status'] = 'done'
+                _scrape_state['finished_at'] = datetime.now().isoformat()
+
         except Exception as e:
             logger.error(f"Scrape failed: {e}")
+            with _scrape_lock:
+                _scrape_state['status'] = 'failed'
+                _scrape_state['error'] = str(e)
+                _scrape_state['finished_at'] = datetime.now().isoformat()
 
     thread = threading.Thread(target=run_scrape, daemon=True)
     thread.start()
 
-    return jsonify({'message': f'Ricerca Immoweb avviata nell\'area mappa Guillemins'}), 202
+    return jsonify({'message': 'Ricerca nuovi annunci su Immoweb avviata'}), 202
+
+
+@app.route('/api/scrape/status', methods=['GET'])
+@login_required
+def api_scrape_status():
+    """Get current scrape status for progress polling."""
+    with _scrape_lock:
+        return jsonify(dict(_scrape_state))
 
 
 @app.route('/api/listings/import', methods=['POST'])
@@ -343,6 +432,152 @@ def api_import_listings():
         'errors': errors,
         'count': count,
     })
+
+
+@app.route('/api/listings/import-by-url', methods=['POST'])
+@login_required
+def api_import_by_url():
+    """Import a single listing from an Immoweb URL."""
+    from playwright.sync_api import sync_playwright
+    from scrape_map_area import make_browser, haversine_distance
+    from db import get_db
+    from config import GUILLEMINS_LAT, GUILLEMINS_LON
+
+    data = request.get_json() or {}
+    url = data.get('url', '').strip()
+
+    if not url:
+        return jsonify({'error': 'URL richiesto'}), 400
+
+    if 'immoweb.be' not in url:
+        return jsonify({'error': 'Inserisci un URL valido di Immoweb'}), 400
+
+    import re
+    match = re.search(r'/(\d{7,})', url)
+    if not match:
+        return jsonify({'error': 'ID annuncio non trovato nell\'URL'}), 400
+
+    external_id = match.group(1)
+
+    db = get_db()
+    exists = db.execute("SELECT id FROM listings WHERE external_id = ?", (external_id,)).fetchone()
+    db.close()
+    if exists:
+        return jsonify({'message': 'Annuncio già presente nel database'}), 200
+
+    try:
+        with sync_playwright() as p:
+            browser = make_browser(p)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                viewport={'width': 1920, 'height': 1080},
+            )
+            page = context.new_page()
+            page.goto(url, wait_until='domcontentloaded', timeout=20000)
+            page.wait_for_timeout(4000)
+
+            detail = page.evaluate("""() => {
+                const scripts = document.querySelectorAll('script');
+                for (const s of scripts) {
+                    const t = s.textContent || '';
+                    if (t.includes('window.classified')) {
+                        try {
+                            const match = t.match(/window\\.classified\\s*=\\s*(\\{[^;]+\\})/);
+                            if (!match) return null;
+                            const c = JSON.parse(match[1]);
+                            const prop = c.property || {};
+                            const loc = prop.location || {};
+                            const pub = c.publication || {};
+                            const media = c.media || [];
+                            const price = c.price || {};
+                            const trans = c.transaction || {};
+                            const features = {};
+                            if (prop.type) features.type = prop.type;
+                            if (prop.subtype) features.subtype = prop.subtype;
+                            if (loc.floor != null) features.floor = loc.floor;
+                            if (prop.hasLift != null) features.lift = prop.hasLift;
+                            if (prop.energy) {
+                                features.energy = prop.energy.epcScore || prop.energy.primaryEnergyConsumptionPerSqm || null;
+                            }
+                            if (prop.hasTerrace != null) features.terrace = prop.hasTerrace;
+                            if (prop.terraceSurface) features.terrace_surface = prop.terraceSurface;
+                            if (prop.hasGarden != null) features.garden = prop.hasGarden;
+                            if (prop.gardenSurface) features.garden_surface = prop.gardenSurface;
+                            if (prop.parkingCountIndoor) features.parking_indoor = prop.parkingCountIndoor;
+                            if (prop.parkingCountOutdoor) features.parking_outdoor = prop.parkingCountOutdoor;
+                            if (prop.parkingCountClosedBox) features.parking_box = prop.parkingCountClosedBox;
+                            if (prop.kitchen && prop.kitchen.type) features.kitchen = prop.kitchen.type;
+                            if (prop.bathroomCount) features.bathrooms = prop.bathroomCount;
+                            if (prop.hasSwimmingPool) features.swimming_pool = prop.hasSwimmingPool;
+                            if (prop.hasBalcony != null) features.balcony = prop.hasBalcony;
+                            return {
+                                lat: loc.latitude,
+                                lng: loc.longitude,
+                                street: loc.street || '',
+                                number: loc.number || '',
+                                box: loc.box || '',
+                                postalCode: loc.postalCode || '',
+                                locality: loc.locality || '',
+                                date_posted: pub.date || pub.creationDate || '',
+                                description: (prop.description && prop.description.en) || '',
+                                bedrooms: prop.bedroomCount || prop.bedrooms || 0,
+                                surface: prop.netHabitableSurface || null,
+                                image: media.length > 0 ? (media[0].url || media[0].src || '') : '',
+                                title: prop.title || prop.name || '',
+                                price: price.mainValue || (trans.rental && trans.rental.monthlyRentalPrice) || 0,
+                                features: Object.keys(features).length > 0 ? JSON.stringify(features) : '',
+                            };
+                        } catch(e) { return null; }
+                    }
+                }
+                return null;
+            }""")
+
+            page.close()
+            browser.close()
+
+        if not detail or not detail.get('lat') or not detail.get('lng'):
+            return jsonify({'error': 'Impossibile estrarre i dati dell\'annuncio'}), 500
+
+        distance = haversine_distance(
+            GUILLEMINS_LAT, GUILLEMINS_LON, detail['lat'], detail['lng']
+        )
+
+        address = (
+            f"{detail.get('street', '')} {detail.get('number', '')}"
+            f"{' ' + detail.get('box', '') if detail.get('box') else ''}"
+            f", {detail.get('postalCode', '')} {detail.get('locality', '')}"
+        ).strip().strip(',')
+
+        listing_data = {
+            'external_id': external_id,
+            'title': detail.get('title') or 'Appartamento',
+            'price': int(detail.get('price', 0)),
+            'bedrooms': detail.get('bedrooms', 0),
+            'surface_area': detail.get('surface'),
+            'address': address,
+            'latitude': detail['lat'],
+            'longitude': detail['lng'],
+            'url': url,
+            'source': 'immoweb',
+            'image_url': detail.get('image', ''),
+            'date_posted': detail.get('date_posted', ''),
+            'distance_to_station': distance,
+        }
+
+        if detail.get('features'):
+            listing_data['features'] = detail['features']
+
+        listing_id = add_listing(listing_data)
+
+        return jsonify({
+            'id': listing_id,
+            'message': f'Annuncio importato: €{listing_data["price"]}, {listing_data["bedrooms"]} cam, {distance:.0f}m dalla stazione',
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error importing listing by URL: {e}")
+        return jsonify({'error': f'Errore importazione: {str(e)}'}), 500
 
 
 @app.route('/api/config')
