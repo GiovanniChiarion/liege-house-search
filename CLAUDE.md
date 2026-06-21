@@ -124,7 +124,7 @@ waitress-serve --port=5000 --call 'app:create_app'
 
 ### Deploy
 **Render** (https://dashboard.render.com):
-- **Build Command**: `pip install -r requirements.txt`
+- **Build Command**: `pip install -r requirements.txt && playwright install chromium`
 - **Start Command**: `waitress-serve --port=$PORT --call 'app:create_app'`
 - **Plan**: Free (sleep dopo 15 min inattività)
 - **Env vars**: `TURSO_URL`, `TURSO_AUTH_TOKEN`, `SECRET_KEY`

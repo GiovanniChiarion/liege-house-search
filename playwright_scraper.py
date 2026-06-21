@@ -8,7 +8,6 @@ then calculates walking distance to Liège-Guillemins station.
 import json
 import logging
 import math
-import os
 import re
 import time
 from datetime import datetime
@@ -18,10 +17,6 @@ from playwright.sync_api import sync_playwright
 from config import GUILLEMINS_LAT, GUILLEMINS_LON, MAX_WALK_DISTANCE_METERS
 
 logger = logging.getLogger(__name__)
-
-CHROMIUM_PATH = os.path.expanduser(
-    '~/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome'
-)
 
 # ---------------------------------------------------------------------------
 # Geometry helpers
@@ -46,7 +41,6 @@ def _browser_context(p):
     """Create a Playwright browser + context."""
     browser = p.chromium.launch(
         headless=True,
-        executable_path=CHROMIUM_PATH,
         args=['--no-sandbox', '--disable-gpu'],
     )
     context = browser.new_context(

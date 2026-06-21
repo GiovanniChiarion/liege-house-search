@@ -4,7 +4,7 @@ Then open detail pages to get coordinates and calculate walking distance.
 """
 import json
 import logging
-import os
+import math
 import time
 import urllib.parse
 
@@ -15,13 +15,8 @@ from config import GUILLEMINS_LAT, GUILLEMINS_LON, MAX_WALK_DISTANCE_METERS
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
-CHROMIUM_PATH = os.path.expanduser(
-    '~/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome'
-)
-
 
 def haversine_distance(lat1, lon1, lat2, lon2):
-    import math
     R = 6371000
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp = math.radians(lat2 - lat1)
@@ -33,7 +28,6 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 def make_browser(p):
     return p.chromium.launch(
         headless=True,
-        executable_path=CHROMIUM_PATH,
         args=['--no-sandbox', '--disable-gpu'],
     )
 
